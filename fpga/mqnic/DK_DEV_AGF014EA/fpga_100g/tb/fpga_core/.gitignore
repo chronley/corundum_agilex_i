@@ -1,0 +1,8 @@
+# Cocotb + Icarus Verilog simulation artifacts
+results.xml
+sim_build/
+__pycache__/
+*.fst
+*.vcd
+*.vvp
+iverilog_dump.v
