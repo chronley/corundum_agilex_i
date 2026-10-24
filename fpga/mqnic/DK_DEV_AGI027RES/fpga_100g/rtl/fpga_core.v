@@ -187,42 +187,6 @@ module fpga_core #
     output wire                                      fpga_i2c_sda_t,
 
     /*
-     * P-Tile interface
-     
-    input  wire [SEG_COUNT*SEG_DATA_WIDTH-1:0]       rx_st_data,
-    input  wire [SEG_COUNT*SEG_EMPTY_WIDTH-1:0]      rx_st_empty,
-    input  wire [SEG_COUNT-1:0]                      rx_st_sop,
-    input  wire [SEG_COUNT-1:0]                      rx_st_eop,
-    input  wire [SEG_COUNT-1:0]                      rx_st_valid,
-    output wire                                      rx_st_ready,
-    input  wire [SEG_COUNT*SEG_HDR_WIDTH-1:0]        rx_st_hdr,
-    input  wire [SEG_COUNT*SEG_PRFX_WIDTH-1:0]       rx_st_tlp_prfx,
-    input  wire [SEG_COUNT-1:0]                      rx_st_vf_active,
-    input  wire [SEG_COUNT*3-1:0]                    rx_st_func_num,
-    input  wire [SEG_COUNT*11-1:0]                   rx_st_vf_num,
-    input  wire [SEG_COUNT*3-1:0]                    rx_st_bar_range,
-    input  wire [SEG_COUNT-1:0]                      rx_st_tlp_abort,
-
-    output wire [SEG_COUNT*SEG_DATA_WIDTH-1:0]       tx_st_data,
-    output wire [SEG_COUNT-1:0]                      tx_st_sop,
-    output wire [SEG_COUNT-1:0]                      tx_st_eop,
-    output wire [SEG_COUNT-1:0]                      tx_st_valid,
-    input  wire                                      tx_st_ready,
-    output wire [SEG_COUNT-1:0]                      tx_st_err,
-    output wire [SEG_COUNT*SEG_HDR_WIDTH-1:0]        tx_st_hdr,
-    output wire [SEG_COUNT*SEG_PRFX_WIDTH-1:0]       tx_st_tlp_prfx,
-
-    output wire [11:0]                               rx_buffer_limit,
-    output wire [1:0]                                rx_buffer_limit_tdm_idx,
-
-    input  wire [15:0]                               tx_cdts_limit,
-    input  wire [2:0]                                tx_cdts_limit_tdm_idx,
-
-    input  wire [15:0]                               tl_cfg_ctl,
-    input  wire [4:0]                                tl_cfg_add,
-    input  wire [2:0]                                tl_cfg_func,
-*/
-        /*
      * R-Tile interface
      */
     input  wire [SEG_COUNT*SEG_DATA_WIDTH-1:0]       rx_st_data,
@@ -257,6 +221,7 @@ module fpga_core #
     input  wire [15:0]                               tl_cfg_ctl,
     input  wire [4:0]                                tl_cfg_add,
     input  wire [2:0]                                tl_cfg_func,
+
     /*
      * Ethernet: QSFP-DD
      */
