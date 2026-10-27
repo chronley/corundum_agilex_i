@@ -201,7 +201,6 @@ reg [INT_TLP_SEG_COUNT-1:0] rx_tlp_sop_reg = 0, rx_tlp_sop_next;
 reg [INT_TLP_SEG_COUNT-1:0] rx_tlp_eop_reg = 0, rx_tlp_eop_next;
 
 wire fifo_tlp_ready;
-wire [1:0] fifo_watermark;
 
 reg [TLP_STRB_WIDTH-1:0] rx_st_strb;
 reg [TLP_STRB_WIDTH-1:0] rx_st_strb_sop;
@@ -210,10 +209,9 @@ reg [TLP_STRB_WIDTH-1:0] rx_st_strb_eop;
 reg [INT_TLP_SEG_COUNT*3-1:0] tlp_bar_id;
 reg [INT_TLP_SEG_COUNT*8-1:0] tlp_func_num;
 
-wire rx_st_ready;
-
-assign rx_st_ready = !fifo_watermark;
-assign p0_rx_st_ready_o = rx_st_ready;
+// R-Tile requires rx_st_ready to be held high; RX buffer control is handled
+// by the RX flow control (credit) interface instead.
+assign p0_rx_st_ready_o = 1'b1;
 
 // demux w/FIFOs
 wire [INT_TLP_SEG_COUNT*128-1:0] demux_match_tlp_hdr;
@@ -299,7 +297,7 @@ pcie_tlp_demux_inst (
      * Status
      */
     .fifo_half_full(),
-    .fifo_watermark(fifo_watermark)
+    .fifo_watermark()
 );
 
 assign rx_cpl_tlp_error = 0;
