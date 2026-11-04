@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1793090224" />
+    <testcase name="run_test_001" classname="test_pcie_rtile_if_tx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.016240596771240234" sim_time_ns="140.001" ratio_time="8620.43445644323" />
+  </testsuite>
+</testsuites>

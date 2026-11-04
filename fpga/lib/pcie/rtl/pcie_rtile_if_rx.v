@@ -186,7 +186,10 @@ wire [SEG_COUNT*SEG_DATA_WIDTH-1:0]   rx_st_data      = {p0_rx_st3_data_i,  p0_r
 wire [SEG_COUNT*SEG_EMPTY_WIDTH-1:0]  rx_st_empty     = {p0_rx_st3_empty_i, p0_rx_st2_empty_i, p0_rx_st1_empty_i, p0_rx_st0_empty_i};
 wire [SEG_COUNT-1:0]                  rx_st_sop       = {p0_rx_st3_sop_i,   p0_rx_st2_sop_i,   p0_rx_st1_sop_i,   p0_rx_st0_sop_i};
 wire [SEG_COUNT-1:0]                  rx_st_eop       = {p0_rx_st3_eop_i,   p0_rx_st2_eop_i,   p0_rx_st1_eop_i,   p0_rx_st0_eop_i};
-wire [SEG_COUNT-1:0]                  rx_st_valid     = {p0_rx_st3_dvalid_i,p0_rx_st2_dvalid_i,p0_rx_st1_dvalid_i,p0_rx_st0_dvalid_i};
+wire [SEG_COUNT-1:0]                  rx_st_valid     = {p0_rx_st3_dvalid_i | p0_rx_st3_hvalid_i,
+                                                            p0_rx_st2_dvalid_i | p0_rx_st2_hvalid_i,
+                                                            p0_rx_st1_dvalid_i | p0_rx_st1_hvalid_i,
+                                                            p0_rx_st0_dvalid_i | p0_rx_st0_hvalid_i};
 wire [SEG_COUNT*SEG_HDR_WIDTH-1:0]    rx_st_hdr       = {p0_rx_st3_hdr_i,   p0_rx_st2_hdr_i,   p0_rx_st1_hdr_i,   p0_rx_st0_hdr_i};
 wire [SEG_COUNT*3-1:0]                rx_st_bar_range = {p0_rx_st3_bar_i,   p0_rx_st2_bar_i,   p0_rx_st1_bar_i,   p0_rx_st0_bar_i};
 wire [SEG_COUNT*3-1:0]                rx_st_func_num  = {p0_rx_st3_pfnum_i, p0_rx_st2_pfnum_i, p0_rx_st1_pfnum_i, p0_rx_st0_pfnum_i};
