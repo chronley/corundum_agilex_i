@@ -1,7 +1,21 @@
 <testsuites name="results">
   <testsuite name="all" package="all">
-    <property name="random_seed" value="1793090235" />
-    <testcase name="run_test_rx_001" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.05469942092895508" sim_time_ns="292.001" ratio_time="5338.283203751972" />
-    <testcase name="run_test_tx_001" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.028474092483520508" sim_time_ns="208.00100000000003" ratio_time="7304.921135603581" />
+    <property name="random_seed" value="1794274996" />
+    <testcase name="run_test_rx_001" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.07167744636535645" sim_time_ns="276.001" ratio_time="3850.5975588633464" />
+    <testcase name="run_test_rx_002" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.07132983207702637" sim_time_ns="280.001" ratio_time="3925.4403360663678" />
+    <testcase name="run_test_rx_003" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.06255626678466797" sim_time_ns="280.0010000000001" ratio_time="4475.986410183705" />
+    <testcase name="run_test_rx_004" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.06588435173034668" sim_time_ns="280.00099999999986" ratio_time="4249.886242274885" />
+    <testcase name="run_test_tx_001" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.056754350662231445" sim_time_ns="340.0010000000002" ratio_time="5990.74777585751" />
+    <testcase name="run_test_tx_002" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.060625553131103516" sim_time_ns="336.001" ratio_time="5542.2339697815805" />
+    <testcase name="run_test_tx_003" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.05806088447570801" sim_time_ns="336.001" ratio_time="5787.045840484549" />
+    <testcase name="run_test_tx_004" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.05482769012451172" sim_time_ns="336.00099999999975" ratio_time="6128.3085104798965" />
+    <testcase name="run_test_rx_credit_001" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.04515695571899414" sim_time_ns="280.0010000000002" ratio_time="6200.617281253634" />
+    <testcase name="run_test_rx_credit_002" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.04512739181518555" sim_time_ns="280.0010000000002" ratio_time="6204.679436088721" />
+    <testcase name="run_test_rx_credit_003" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.04508829116821289" sim_time_ns="280.00099999999975" ratio_time="6210.060145224568" />
+    <testcase name="run_test_rx_credit_004" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.044293880462646484" sim_time_ns="280.0010000000002" ratio_time="6321.437568246659" />
+    <testcase name="run_test_tx_credit_001" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.029408931732177734" sim_time_ns="164.00099999999975" ratio_time="5576.571141499789" />
+    <testcase name="run_test_tx_credit_002" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.029564619064331055" sim_time_ns="160.0010000000002" ratio_time="5411.908053063239" />
+    <testcase name="run_test_tx_credit_003" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.027773380279541016" sim_time_ns="160.00099999999975" ratio_time="5760.9480153146105" />
+    <testcase name="run_test_tx_credit_004" classname="test_pcie_rtile_if" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.029253005981445312" sim_time_ns="160.00099999999975" ratio_time="5469.55755936623" />
   </testsuite>
 </testsuites>

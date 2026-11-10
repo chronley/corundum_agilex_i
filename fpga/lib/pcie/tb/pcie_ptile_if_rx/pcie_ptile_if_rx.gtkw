@@ -1,22 +1,22 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Tue Nov  3 11:03:17 2026
+[*] Fri Nov  6 11:07:36 2026
 [*]
 [dumpfile] "/home/zju/fpga_projects/corundum_agilex_i/fpga/lib/pcie/tb/pcie_ptile_if_rx/pcie_ptile_if_rx.fst"
-[dumpfile_mtime] "Tue Nov  3 10:00:45 2026"
-[dumpfile_size] 779529
+[dumpfile_mtime] "Thu Nov  5 14:29:38 2026"
+[dumpfile_size] 795761
 [savefile] "/home/zju/fpga_projects/corundum_agilex_i/fpga/lib/pcie/tb/pcie_ptile_if_rx/pcie_ptile_if_rx.gtkw"
-[timestart] 8350710
-[size] 3002 1664
-[pos] -51 -51
-*-12.000000 88000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[timestart] 35438564
+[size] 3010 1664
+[pos] -1 -1
+*-10.000000 32876004 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] pcie_ptile_if_rx.
 [treeopen] pcie_ptile_if_rx.pcie_tlp_demux_inst.
 [treeopen] pcie_ptile_if_rx.pcie_tlp_demux_inst.genblk1.
 [treeopen] pcie_ptile_if_rx.pcie_tlp_demux_inst.genblk1.genblk2[0].
 [treeopen] pcie_ptile_if_rx.pcie_tlp_demux_inst.genblk1.genblk2[1].
 [sst_width] 381
-[signals_width] 277
+[signals_width] 323
 [sst_expanded] 1
 [sst_vpaned_height] 514
 @28
@@ -25,7 +25,7 @@ pcie_ptile_if_rx.rst
 @22
 [color] 3
 pcie_ptile_if_rx.rx_st_data[511:0]
-@29
+@28
 [color] 3
 pcie_ptile_if_rx.rx_st_empty[5:0]
 @22
@@ -92,5 +92,16 @@ pcie_ptile_if_rx.rx_cpl_tlp_sop
 pcie_ptile_if_rx.rx_cpl_tlp_strb[15:0]
 @28
 pcie_ptile_if_rx.rx_cpl_tlp_valid
+@200
+-
+@22
+[color] 3
+pcie_ptile_if_rx.rx_st_data[511:0]
+pcie_ptile_if_rx.rx_tlp_data_next[511:0]
+pcie_ptile_if_rx.rx_tlp_data_reg[511:0]
+pcie_ptile_if_rx.pcie_tlp_demux_inst.in_tlp_data[511:0]
+pcie_ptile_if_rx.pcie_tlp_demux_inst.genblk1.genblk2[0].pcie_tlp_fifo_inst.out_tlp_data[511:0]
+@23
+pcie_ptile_if_rx.pcie_tlp_demux_inst.genblk1.genblk2[1].pcie_tlp_fifo_inst.out_tlp_data[511:0]
 [pattern_trace] 1
 [pattern_trace] 0

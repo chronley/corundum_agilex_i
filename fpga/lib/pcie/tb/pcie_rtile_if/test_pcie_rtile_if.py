@@ -6,6 +6,7 @@ R-Tile PCIe interface adapter testbench
 import itertools
 import logging
 import os
+import random
 import sys
 
 import cocotb_test.simulator
@@ -92,30 +93,38 @@ def make_tlp(fmt_type, tag, addr, data=None, length=None):
     return tlp
 
 
-async def run_test_rx(dut):
+async def run_test_rx(dut, seed=0):
     tb = TB(dut)
 
     await tb.cycle_reset()
 
     # wait for the RX credit init state machine to complete
-    for _ in range(32):
+    for _ in range(64):
         await RisingEdge(dut.clk)
+        if int(dut.p0_rx_st_hcrdt_init_o.value) == 0 and int(dut.p0_rx_st_dcrdt_init_o.value) == 0:
+            break
     assert int(dut.p0_rx_st_hcrdt_init_o.value) == 0
     assert int(dut.p0_rx_st_dcrdt_init_o.value) == 0
+
+    rng = random.Random(seed)
 
     req_tlps = []
     cpl_tlps = []
 
-    for i in range(4):
-        data = bytearray(itertools.islice(itertools.cycle(range(256)), 64*(i+1)))
-        req_tlps.append(make_tlp(TlpType.MEM_WRITE, 0x10+i, 0x1000 + 0x100*i, data))
-
-    for i in range(4):
-        req_tlps.append(make_tlp(TlpType.MEM_READ, 0x20+i, 0x2000 + 0x10*i, length=8))
-
-    for i in range(4):
-        data = bytearray(itertools.islice(itertools.cycle(range(256)), 32*(i+1)))
-        cpl_tlps.append(make_tlp(TlpType.CPL_DATA, 0x30+i, 0, data))
+    # random mix of posted (MEM_WRITE), non-posted (MEM_READ) and completions
+    for i in range(16):
+        kind = rng.randrange(3)
+        tag = rng.randrange(256)
+        addr = rng.randrange(0x100000)
+        length = rng.randrange(1, 33)
+        if kind == 0:
+            data = bytearray(rng.getrandbits(8) for _ in range(length*4))
+            req_tlps.append(make_tlp(TlpType.MEM_WRITE, tag, addr, data))
+        elif kind == 1:
+            req_tlps.append(make_tlp(TlpType.MEM_READ, tag, addr, length=length))
+        else:
+            data = bytearray(rng.getrandbits(8) for _ in range(length*4))
+            cpl_tlps.append(make_tlp(TlpType.CPL_DATA, tag, 0, data))
 
     for tlp in req_tlps + cpl_tlps:
         tb.rx_source.send(tlp)
@@ -132,7 +141,9 @@ async def run_test_rx(dut):
 
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
-async def run_test_tx(dut):
+
+
+async def run_test_tx(dut, seed=0):
     tb = TB(dut)
 
     await tb.cycle_reset()
@@ -141,31 +152,144 @@ async def run_test_tx(dut):
     tb.tx_credit = RtileTxCreditSource(dut, dut.clk, infinite=True)
 
     # allow the TX credit init/update handshake to complete
-    for _ in range(32):
+    for _ in range(64):
         await RisingEdge(dut.clk)
+
+    rng = random.Random(seed)
 
     expected = {}
     senders = []
 
-    for i in range(2):
-        tlp = make_tlp(TlpType.MEM_WRITE, 0x40+i, 0x1000, bytearray(itertools.islice(itertools.cycle(range(256)), 4)))
+    # random mix from the four TX input ports
+    for i in range(8):
+        kind = rng.randrange(4)
+        tag = 0x40 + i
+        addr = rng.randrange(0x100000)
+        length = rng.randrange(1, 17)
+        if kind == 0:
+            tlp = make_tlp(TlpType.MEM_WRITE, tag, addr, bytearray(rng.getrandbits(8) for _ in range(4)))
+            senders.append((tb.msi_source, tlp))
+        elif kind == 1:
+            tlp = make_tlp(TlpType.CPL_DATA, tag, 0, bytearray(rng.getrandbits(8) for _ in range(length*4)))
+            senders.append((tb.cpl_source, tlp))
+        elif kind == 2:
+            tlp = make_tlp(TlpType.MEM_READ, tag, addr, length=length)
+            senders.append((tb.rd_req_source, tlp))
+        else:
+            tlp = make_tlp(TlpType.MEM_WRITE, tag, addr, bytearray(rng.getrandbits(8) for _ in range(length*4)))
+            senders.append((tb.wr_req_source, tlp))
         expected[tlp.tag] = tlp
-        senders.append((tb.msi_source, tlp))
 
-    for i in range(2):
-        tlp = make_tlp(TlpType.CPL_DATA, 0x50+i, 0, bytearray(itertools.islice(itertools.cycle(range(256)), 32)))
-        expected[tlp.tag] = tlp
-        senders.append((tb.cpl_source, tlp))
+    for source, tlp in senders:
+        await source.send(PcieIfFrame.from_tlp(tlp))
 
-    for i in range(2):
-        tlp = make_tlp(TlpType.MEM_READ, 0x60+i, 0x2000, length=8)
-        expected[tlp.tag] = tlp
-        senders.append((tb.rd_req_source, tlp))
+    received = []
+    for _ in range(len(senders)):
+        received.append(await tb.tx_sink.recv())
 
-    for i in range(2):
-        tlp = make_tlp(TlpType.MEM_WRITE, 0x70+i, 0x3000, bytearray(itertools.islice(itertools.cycle(range(256)), 64)))
+    assert len(received) == len(senders)
+
+    for rx in received:
+        exp = expected[rx.tag]
+        assert rx == exp, f"TLP mismatch:\n  got {rx}\n  exp {exp}"
+
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+
+
+async def run_test_rx_credit(dut, seed=0):
+    tb = TB(dut)
+
+    await tb.cycle_reset()
+
+    # verify finite credits (non-zero update counts) are advertised during init
+    saw_nonzero_update = False
+    for _ in range(64):
+        await RisingEdge(dut.clk)
+        if int(dut.p0_rx_st_hcrdt_update_o.value) and int(dut.p0_rx_st_hcrdt_update_cnt_o.value) != 0:
+            saw_nonzero_update = True
+        if int(dut.p0_rx_st_dcrdt_update_o.value) and int(dut.p0_rx_st_dcrdt_update_cnt_o.value) != 0:
+            saw_nonzero_update = True
+        if int(dut.p0_rx_st_hcrdt_init_o.value) == 0 and int(dut.p0_rx_st_dcrdt_init_o.value) == 0:
+            break
+
+    assert saw_nonzero_update, "finite RX credits were not advertised during initialization"
+    assert int(dut.p0_rx_st_hcrdt_init_o.value) == 0
+    assert int(dut.p0_rx_st_dcrdt_init_o.value) == 0
+
+    # verify credits are returned as TLPs are drained
+    rng = random.Random(seed)
+
+    return_count = [0]
+
+    async def monitor_return():
+        while True:
+            await RisingEdge(dut.clk)
+            if int(dut.p0_rx_st_hcrdt_init_o.value) == 0 and int(dut.p0_rx_st_dcrdt_init_o.value) == 0:
+                if int(dut.p0_rx_st_hcrdt_update_o.value) or int(dut.p0_rx_st_dcrdt_update_o.value):
+                    return_count[0] += 1
+
+    cocotb.start_soon(monitor_return())
+
+    req_tlps = []
+    for i in range(8):
+        length = rng.randrange(1, 17)
+        data = bytearray(rng.getrandbits(8) for _ in range(length*4))
+        req_tlps.append(make_tlp(TlpType.MEM_WRITE, rng.randrange(256), rng.randrange(0x100000), data))
+
+    for tlp in req_tlps:
+        tb.rx_source.send(tlp)
+
+    for tlp in req_tlps:
+        rx_frame = await tb.req_sink.recv()
+        assert rx_frame.to_tlp() == tlp
+
+    for _ in range(16):
+        await RisingEdge(dut.clk)
+
+    assert return_count[0] > 0, "RX credits were not returned after draining TLPs"
+
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+
+
+async def run_test_tx_credit(dut, seed=0):
+    tb = TB(dut)
+
+    await tb.cycle_reset()
+
+    # finite credits for the TX credit model (not infinite)
+    tb.tx_credit = RtileTxCreditSource(dut, dut.clk, infinite=False)
+
+    # allow the TX credit init/update handshake to complete
+    for _ in range(64):
+        await RisingEdge(dut.clk)
+        if int(dut.p0_tx_st_hcrdt_init_i.value) == 0 and int(dut.p0_tx_st_dcrdt_init_i.value) == 0:
+            break
+
+    rng = random.Random(seed)
+
+    expected = {}
+    senders = []
+
+    for i in range(8):
+        kind = rng.randrange(4)
+        tag = 0x40 + i
+        addr = rng.randrange(0x100000)
+        length = rng.randrange(1, 17)
+        if kind == 0:
+            tlp = make_tlp(TlpType.MEM_WRITE, tag, addr, bytearray(rng.getrandbits(8) for _ in range(4)))
+            senders.append((tb.msi_source, tlp))
+        elif kind == 1:
+            tlp = make_tlp(TlpType.CPL_DATA, tag, 0, bytearray(rng.getrandbits(8) for _ in range(length*4)))
+            senders.append((tb.cpl_source, tlp))
+        elif kind == 2:
+            tlp = make_tlp(TlpType.MEM_READ, tag, addr, length=length)
+            senders.append((tb.rd_req_source, tlp))
+        else:
+            tlp = make_tlp(TlpType.MEM_WRITE, tag, addr, bytearray(rng.getrandbits(8) for _ in range(length*4)))
+            senders.append((tb.wr_req_source, tlp))
         expected[tlp.tag] = tlp
-        senders.append((tb.wr_req_source, tlp))
 
     for source, tlp in senders:
         await source.send(PcieIfFrame.from_tlp(tlp))
@@ -185,11 +309,10 @@ async def run_test_tx(dut):
 
 
 if cocotb.SIM_NAME:
-    factory = TestFactory(run_test_rx)
-    factory.generate_tests()
-
-    factory = TestFactory(run_test_tx)
-    factory.generate_tests()
+    for test in [run_test_rx, run_test_tx, run_test_rx_credit, run_test_tx_credit]:
+        factory = TestFactory(test)
+        factory.add_option("seed", [0, 1, 2, 3])
+        factory.generate_tests()
 
 
 # cocotb-test

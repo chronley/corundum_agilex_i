@@ -269,10 +269,26 @@ module pcie_rtile_if #
     input  wire                                       tx_msi_wr_req_tlp_eop,
     output wire                                       tx_msi_wr_req_tlp_ready
 );
-// R-Tile RX flow control credit initialization.  The receive adapter buffers
-// TLPs in its internal demux FIFOs, so advertise infinite credits to the IP
-// (a single update pulse with a count of zero during the init phase) and rely
-// on the FIFO capacity plus downstream backpressure for buffer management.
+// R-Tile RX flow control.  The receive adapter buffers TLPs in its internal
+// demux FIFOs, so advertise a finite number of credits matching the FIFO
+// capacity during the credit initialization phase, then return credits to the
+// IP as TLPs are drained from the FIFOs.  This provides credit-based
+// backpressure per the R-Tile Avalon-ST for PCIe specification.
+//
+// Credit accounting (per the specification):
+//  - One header credit per TLP (posted, non-posted, or completion header).
+//  - One data credit per 16 bytes (4 dwords).
+//  - The demux FIFO holds 1024 dwords (256 data credits) per output port; the
+//    request port is shared between posted and non-posted traffic while the
+//    completion port carries completions only.  Header storage is 32 entries
+//    per port.
+localparam [5:0] RX_CRDT_PH   = 16;   // posted header credits (request port)
+localparam [5:0] RX_CRDT_NPH  = 16;   // non-posted header credits (request port)
+localparam [5:0] RX_CRDT_CPLH = 32;   // completion header credits (completion port)
+localparam [8:0] RX_CRDT_PD   = 128;  // posted data credits (request port)
+localparam [8:0] RX_CRDT_NPD  = 128;  // non-posted data credits (request port)
+localparam [8:0] RX_CRDT_CPLD = 256;  // completion data credits (completion port)
+
 localparam [2:0]
     RX_CRDT_ST_IDLE = 3'd0,
     RX_CRDT_ST_INIT = 3'd1,
@@ -283,6 +299,14 @@ localparam [2:0]
 
 reg [2:0] rx_crdt_state_reg = RX_CRDT_ST_IDLE;
 
+// Remaining credits to advertise during the credit initialization phase.
+reg [5:0] rx_crdt_ph_rem = RX_CRDT_PH;
+reg [5:0] rx_crdt_nph_rem = RX_CRDT_NPH;
+reg [5:0] rx_crdt_cplh_rem = RX_CRDT_CPLH;
+reg [8:0] rx_crdt_pd_rem = RX_CRDT_PD;
+reg [8:0] rx_crdt_npd_rem = RX_CRDT_NPD;
+reg [8:0] rx_crdt_cpld_rem = RX_CRDT_CPLD;
+
 wire rx_crdt_init_assert = (rx_crdt_state_reg == RX_CRDT_ST_INIT) ||
                            (rx_crdt_state_reg == RX_CRDT_ST_UPDATE) ||
                            (rx_crdt_state_reg == RX_CRDT_ST_WAIT1) ||
@@ -291,29 +315,181 @@ wire rx_crdt_update_assert = (rx_crdt_state_reg == RX_CRDT_ST_UPDATE);
 
 assign p0_rx_st_hcrdt_init_o = {3{rx_crdt_init_assert}};
 assign p0_rx_st_dcrdt_init_o = {3{rx_crdt_init_assert}};
-assign p0_rx_st_hcrdt_update_o = {3{rx_crdt_update_assert}};
-assign p0_rx_st_dcrdt_update_o = {3{rx_crdt_update_assert}};
-assign p0_rx_st_hcrdt_update_cnt_o = 6'd0;
-assign p0_rx_st_dcrdt_update_cnt_o = 12'd0;
+
+// Credit counts advertised each update cycle during initialization.  Each
+// update may release at most 3 header credits and 15 data credits per type.
+wire [1:0] rx_crdt_init_ph_cnt   = rx_crdt_ph_rem   > 3 ? 2'd3 : rx_crdt_ph_rem[1:0];
+wire [1:0] rx_crdt_init_nph_cnt  = rx_crdt_nph_rem  > 3 ? 2'd3 : rx_crdt_nph_rem[1:0];
+wire [1:0] rx_crdt_init_cplh_cnt = rx_crdt_cplh_rem > 3 ? 2'd3 : rx_crdt_cplh_rem[1:0];
+wire [3:0] rx_crdt_init_pd_cnt   = rx_crdt_pd_rem   > 15 ? 4'd15 : rx_crdt_pd_rem[3:0];
+wire [3:0] rx_crdt_init_npd_cnt  = rx_crdt_npd_rem  > 15 ? 4'd15 : rx_crdt_npd_rem[3:0];
+wire [3:0] rx_crdt_init_cpld_cnt = rx_crdt_cpld_rem > 15 ? 4'd15 : rx_crdt_cpld_rem[3:0];
+
+wire rx_crdt_init_ph_en   = rx_crdt_ph_rem   != 0;
+wire rx_crdt_init_nph_en  = rx_crdt_nph_rem  != 0;
+wire rx_crdt_init_cplh_en = rx_crdt_cplh_rem != 0;
+wire rx_crdt_init_pd_en   = rx_crdt_pd_rem   != 0;
+wire rx_crdt_init_npd_en  = rx_crdt_npd_rem  != 0;
+wire rx_crdt_init_cpld_en = rx_crdt_cpld_rem != 0;
+
+// All credits advertised once each remaining count is no larger than this
+// cycle's advertised count (i.e. this is the final update cycle).
+wire rx_crdt_init_done = (rx_crdt_ph_rem   <= rx_crdt_init_ph_cnt) &&
+                         (rx_crdt_nph_rem  <= rx_crdt_init_nph_cnt) &&
+                         (rx_crdt_cplh_rem <= rx_crdt_init_cplh_cnt) &&
+                         (rx_crdt_pd_rem   <= rx_crdt_init_pd_cnt) &&
+                         (rx_crdt_npd_rem  <= rx_crdt_init_npd_cnt) &&
+                         (rx_crdt_cpld_rem <= rx_crdt_init_cpld_cnt);
+
+// Credit return: decode TLPs drained at the demux outputs and return their
+// header and data credits to the IP.
+wire [3:0] req_fc_ph, req_fc_nph, req_fc_cplh;
+wire [8:0] req_fc_pd, req_fc_npd, req_fc_cpld;
+wire [3:0] cpl_fc_ph, cpl_fc_nph, cpl_fc_cplh;
+wire [8:0] cpl_fc_pd, cpl_fc_npd, cpl_fc_cpld;
+
+pcie_tlp_fc_count #(
+    .TLP_HDR_WIDTH(TLP_HDR_WIDTH),
+    .TLP_SEG_COUNT(TLP_SEG_COUNT)
+)
+req_fc_count_inst (
+    .clk(clk),
+    .rst(rst),
+    .tlp_hdr(rx_req_tlp_hdr),
+    .tlp_valid(rx_req_tlp_valid),
+    .tlp_sop(rx_req_tlp_sop),
+    .tlp_ready(rx_req_tlp_ready),
+    .out_fc_ph(req_fc_ph),
+    .out_fc_pd(req_fc_pd),
+    .out_fc_nph(req_fc_nph),
+    .out_fc_npd(req_fc_npd),
+    .out_fc_cplh(req_fc_cplh),
+    .out_fc_cpld(req_fc_cpld)
+);
+
+pcie_tlp_fc_count #(
+    .TLP_HDR_WIDTH(TLP_HDR_WIDTH),
+    .TLP_SEG_COUNT(TLP_SEG_COUNT)
+)
+cpl_fc_count_inst (
+    .clk(clk),
+    .rst(rst),
+    .tlp_hdr(rx_cpl_tlp_hdr),
+    .tlp_valid(rx_cpl_tlp_valid),
+    .tlp_sop(rx_cpl_tlp_sop),
+    .tlp_ready(rx_cpl_tlp_ready),
+    .out_fc_ph(cpl_fc_ph),
+    .out_fc_pd(cpl_fc_pd),
+    .out_fc_nph(cpl_fc_nph),
+    .out_fc_npd(cpl_fc_npd),
+    .out_fc_cplh(cpl_fc_cplh),
+    .out_fc_cpld(cpl_fc_cpld)
+);
+
+// Pending credit-return accumulators.
+reg [7:0] rx_ret_ph = 0;
+reg [7:0] rx_ret_nph = 0;
+reg [7:0] rx_ret_cplh = 0;
+reg [11:0] rx_ret_pd = 0;
+reg [11:0] rx_ret_npd = 0;
+reg [11:0] rx_ret_cpld = 0;
+
+// Credit-return update pulses (only after initialization completes).
+wire rx_ret_ph_en   = (rx_crdt_state_reg == RX_CRDT_ST_DONE) && (rx_ret_ph != 0);
+wire rx_ret_nph_en  = (rx_crdt_state_reg == RX_CRDT_ST_DONE) && (rx_ret_nph != 0);
+wire rx_ret_cplh_en = (rx_crdt_state_reg == RX_CRDT_ST_DONE) && (rx_ret_cplh != 0);
+wire rx_ret_pd_en   = (rx_crdt_state_reg == RX_CRDT_ST_DONE) && (rx_ret_pd != 0);
+wire rx_ret_npd_en  = (rx_crdt_state_reg == RX_CRDT_ST_DONE) && (rx_ret_npd != 0);
+wire rx_ret_cpld_en = (rx_crdt_state_reg == RX_CRDT_ST_DONE) && (rx_ret_cpld != 0);
+
+wire [1:0] rx_ret_ph_cnt   = rx_ret_ph   > 3 ? 2'd3 : rx_ret_ph[1:0];
+wire [1:0] rx_ret_nph_cnt  = rx_ret_nph  > 3 ? 2'd3 : rx_ret_nph[1:0];
+wire [1:0] rx_ret_cplh_cnt = rx_ret_cplh > 3 ? 2'd3 : rx_ret_cplh[1:0];
+wire [3:0] rx_ret_pd_cnt   = rx_ret_pd   > 15 ? 4'd15 : rx_ret_pd[3:0];
+wire [3:0] rx_ret_npd_cnt  = rx_ret_npd  > 15 ? 4'd15 : rx_ret_npd[3:0];
+wire [3:0] rx_ret_cpld_cnt = rx_ret_cpld > 15 ? 4'd15 : rx_ret_cpld[3:0];
+
+// Credit update outputs: advertise the initial credits during initialization,
+// return drained-TLP credits during normal operation.
+assign p0_rx_st_hcrdt_update_o = rx_crdt_update_assert ?
+    {rx_crdt_init_cplh_en, rx_crdt_init_nph_en, rx_crdt_init_ph_en} :
+    {rx_ret_cplh_en, rx_ret_nph_en, rx_ret_ph_en};
+assign p0_rx_st_hcrdt_update_cnt_o = rx_crdt_update_assert ?
+    {rx_crdt_init_cplh_cnt, rx_crdt_init_nph_cnt, rx_crdt_init_ph_cnt} :
+    {rx_ret_cplh_cnt, rx_ret_nph_cnt, rx_ret_ph_cnt};
+assign p0_rx_st_dcrdt_update_o = rx_crdt_update_assert ?
+    {rx_crdt_init_cpld_en, rx_crdt_init_npd_en, rx_crdt_init_pd_en} :
+    {rx_ret_cpld_en, rx_ret_npd_en, rx_ret_pd_en};
+assign p0_rx_st_dcrdt_update_cnt_o = rx_crdt_update_assert ?
+    {rx_crdt_init_cpld_cnt, rx_crdt_init_npd_cnt, rx_crdt_init_pd_cnt} :
+    {rx_ret_cpld_cnt, rx_ret_npd_cnt, rx_ret_pd_cnt};
 
 always @(posedge clk) begin
     if (rst) begin
         rx_crdt_state_reg <= RX_CRDT_ST_IDLE;
+        rx_crdt_ph_rem <= RX_CRDT_PH;
+        rx_crdt_nph_rem <= RX_CRDT_NPH;
+        rx_crdt_cplh_rem <= RX_CRDT_CPLH;
+        rx_crdt_pd_rem <= RX_CRDT_PD;
+        rx_crdt_npd_rem <= RX_CRDT_NPD;
+        rx_crdt_cpld_rem <= RX_CRDT_CPLD;
+        rx_ret_ph <= 0;
+        rx_ret_nph <= 0;
+        rx_ret_cplh <= 0;
+        rx_ret_pd <= 0;
+        rx_ret_npd <= 0;
+        rx_ret_cpld <= 0;
     end else begin
         case (rx_crdt_state_reg)
-            RX_CRDT_ST_IDLE: rx_crdt_state_reg <= RX_CRDT_ST_INIT;
+            RX_CRDT_ST_IDLE: begin
+                rx_crdt_ph_rem <= RX_CRDT_PH;
+                rx_crdt_nph_rem <= RX_CRDT_NPH;
+                rx_crdt_cplh_rem <= RX_CRDT_CPLH;
+                rx_crdt_pd_rem <= RX_CRDT_PD;
+                rx_crdt_npd_rem <= RX_CRDT_NPD;
+                rx_crdt_cpld_rem <= RX_CRDT_CPLD;
+                rx_crdt_state_reg <= RX_CRDT_ST_INIT;
+            end
             RX_CRDT_ST_INIT: begin
                 if (&p0_rx_st_hcrdt_init_ack_i && &p0_rx_st_dcrdt_init_ack_i) begin
                     rx_crdt_state_reg <= RX_CRDT_ST_UPDATE;
                 end
             end
-            RX_CRDT_ST_UPDATE: rx_crdt_state_reg <= RX_CRDT_ST_WAIT1;
+            RX_CRDT_ST_UPDATE: begin
+                rx_crdt_ph_rem <= rx_crdt_ph_rem - rx_crdt_init_ph_cnt;
+                rx_crdt_nph_rem <= rx_crdt_nph_rem - rx_crdt_init_nph_cnt;
+                rx_crdt_cplh_rem <= rx_crdt_cplh_rem - rx_crdt_init_cplh_cnt;
+                rx_crdt_pd_rem <= rx_crdt_pd_rem - rx_crdt_init_pd_cnt;
+                rx_crdt_npd_rem <= rx_crdt_npd_rem - rx_crdt_init_npd_cnt;
+                rx_crdt_cpld_rem <= rx_crdt_cpld_rem - rx_crdt_init_cpld_cnt;
+                if (rx_crdt_init_done) begin
+                    rx_crdt_state_reg <= RX_CRDT_ST_WAIT1;
+                end
+            end
             RX_CRDT_ST_WAIT1: rx_crdt_state_reg <= RX_CRDT_ST_WAIT2;
             RX_CRDT_ST_WAIT2: rx_crdt_state_reg <= RX_CRDT_ST_DONE;
             default: rx_crdt_state_reg <= RX_CRDT_ST_DONE;
         endcase
+
+        // Accumulate returned credits and drain them via update pulses.
+        if (rx_crdt_state_reg == RX_CRDT_ST_DONE) begin
+            rx_ret_ph <= rx_ret_ph + req_fc_ph + cpl_fc_ph - {6'b0, rx_ret_ph_en ? rx_ret_ph_cnt : 2'b0};
+            rx_ret_nph <= rx_ret_nph + req_fc_nph + cpl_fc_nph - {6'b0, rx_ret_nph_en ? rx_ret_nph_cnt : 2'b0};
+            rx_ret_cplh <= rx_ret_cplh + req_fc_cplh + cpl_fc_cplh - {6'b0, rx_ret_cplh_en ? rx_ret_cplh_cnt : 2'b0};
+            rx_ret_pd <= rx_ret_pd + req_fc_pd + cpl_fc_pd - {8'b0, rx_ret_pd_en ? rx_ret_pd_cnt : 4'b0};
+            rx_ret_npd <= rx_ret_npd + req_fc_npd + cpl_fc_npd - {8'b0, rx_ret_npd_en ? rx_ret_npd_cnt : 4'b0};
+            rx_ret_cpld <= rx_ret_cpld + req_fc_cpld + cpl_fc_cpld - {8'b0, rx_ret_cpld_en ? rx_ret_cpld_cnt : 4'b0};
+        end else begin
+            rx_ret_ph <= 0;
+            rx_ret_nph <= 0;
+            rx_ret_cplh <= 0;
+            rx_ret_pd <= 0;
+            rx_ret_npd <= 0;
+            rx_ret_cpld <= 0;
+        end
     end
 end
+
 pcie_rtile_if_rx #(
     .SEG_COUNT(SEG_COUNT),
     .SEG_DATA_WIDTH(SEG_DATA_WIDTH),
