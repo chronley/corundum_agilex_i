@@ -1,6 +1,31 @@
 <testsuites name="results">
   <testsuite name="all" package="all">
-    <property name="random_seed" value="1793778626" />
-    <testcase name="run_test_001" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.028856277465820312" sim_time_ns="164.001" ratio_time="5683.373407892128" />
+    <property name="random_seed" value="1794275380" />
+    <testcase name="run_test_req_001" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.4363689422607422" sim_time_ns="2372.001" ratio_time="5435.769529589174" />
+    <testcase name="run_test_req_002" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.23782682418823242" sim_time_ns="1596.0009999999997" ratio_time="6710.7695082234095">
+      <failure />
+    </testcase>
+    <testcase name="run_test_req_003" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.0019326210021972656" sim_time_ns="8.001000000000204" ratio_time="4139.973637305805">
+      <failure />
+    </testcase>
+    <testcase name="run_test_req_004" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.0019636154174804688" sim_time_ns="8.000999999999749" ratio_time="4074.626797474374">
+      <failure />
+    </testcase>
+    <testcase name="run_test_cpl_001" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.42725253105163574" sim_time_ns="2376.001" ratio_time="5561.116265716979" />
+    <testcase name="run_test_cpl_002" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.21642422676086426" sim_time_ns="1596.0010000000002" ratio_time="7374.4100828577075">
+      <failure />
+    </testcase>
+    <testcase name="run_test_cpl_003" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.0018377304077148438" sim_time_ns="8.000999999999294" ratio_time="4353.739790347307">
+      <failure />
+    </testcase>
+    <testcase name="run_test_cpl_004" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.0017969608306884766" sim_time_ns="8.001000000000204" ratio_time="4452.517752952216">
+      <failure />
+    </testcase>
+    <testcase name="run_stress_test_001" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.01188802719116211" sim_time_ns="72.0010000000002" ratio_time="6056.597856163027">
+      <failure />
+    </testcase>
+    <testcase name="run_stress_test_002" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.3384053707122803" sim_time_ns="2436.001" ratio_time="7198.470269170586" />
+    <testcase name="run_stress_test_003" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.3342757225036621" sim_time_ns="2296.001" ratio_time="6868.5843614468495" />
+    <testcase name="run_stress_test_004" classname="test_pcie_rtile_if_rx" file="/home/zju/.local/lib/python3.10/site-packages/cocotb/regression.py" lineno="713" time="0.3382253646850586" sim_time_ns="2452.001" ratio_time="7249.607084563872" />
   </testsuite>
 </testsuites>

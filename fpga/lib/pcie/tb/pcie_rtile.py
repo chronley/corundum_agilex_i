@@ -95,6 +95,8 @@ class RtilePcieSource:
         self.bar = 0
         self.pfnum = 0
         self.queue_occupancy = 0
+        self._pause_cr = None
+        self._pause_generator = None
         cocotb.start_soon(self._run())
 
     def send(self, tlp):
@@ -103,6 +105,24 @@ class RtilePcieSource:
 
     def empty(self):
         return self.queue.empty()
+
+    def set_pause_generator(self, generator=None):
+        if self._pause_cr is not None:
+            self._pause_cr.kill()
+            self._pause_cr = None
+
+        self._pause_generator = generator
+
+        if self._pause_generator is not None:
+            self._pause_cr = cocotb.start_soon(self._run_pause())
+
+    def clear_pause_generator(self):
+        self.set_pause_generator(None)
+
+    async def _run_pause(self):
+        for val in self._pause_generator:
+            self.pause = val
+            await RisingEdge(self.clock)
 
     def _idle(self):
         for seg in self.bus.seg:

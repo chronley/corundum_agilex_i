@@ -6,6 +6,7 @@ R-Tile PCIe interface adapter (receive) testbench
 import itertools
 import logging
 import os
+import random
 import sys
 
 import cocotb_test.simulator
@@ -50,6 +51,15 @@ class TB(object):
         self.req_sink = PcieIfSink(PcieIfRxBus.from_prefix(dut, "rx_req_tlp"), dut.clk, dut.rst)
         self.cpl_sink = PcieIfSink(PcieIfRxBus.from_prefix(dut, "rx_cpl_tlp"), dut.clk, dut.rst)
 
+    def set_idle_generator(self, generator=None):
+        if generator:
+            self.source.set_pause_generator(generator())
+
+    def set_backpressure_generator(self, generator=None):
+        if generator:
+            self.req_sink.set_pause_generator(generator())
+            self.cpl_sink.set_pause_generator(generator())
+
     async def cycle_reset(self):
         self.dut.rst.setimmediatevalue(0)
         await RisingEdge(self.dut.clk)
@@ -62,73 +72,42 @@ class TB(object):
         await RisingEdge(self.dut.clk)
 
 
-def make_mem_write(tag, addr, data):
-    tlp = Tlp()
-    tlp.fmt_type = TlpType.MEM_WRITE
-    tlp.requester_id = 0
-    tlp.tag = tag
-    tlp.addr = addr
-    tlp.set_data(data)
-    tlp.length = len(data) // 4
-    return tlp
+async def run_test_req(dut, payload_lengths=None, payload_data=None, idle_inserter=None, backpressure_inserter=None):
 
-
-def make_mem_read(tag, addr, length):
-    tlp = Tlp()
-    tlp.fmt_type = TlpType.MEM_READ
-    tlp.requester_id = 0
-    tlp.tag = tag
-    tlp.addr = addr
-    tlp.length = length
-    return tlp
-
-
-def make_cpl_data(tag, cpl_id, data):
-    tlp = Tlp()
-    tlp.fmt_type = TlpType.CPL_DATA
-    tlp.completer_id = cpl_id
-    tlp.requester_id = 0
-    tlp.tag = tag
-    tlp.set_data(data)
-    tlp.length = len(data) // 4
-    tlp.byte_count = len(data)
-    return tlp
-
-
-async def run_test(dut):
     tb = TB(dut)
+
+    seq_count = 32
+
+    cur_seq = 1
 
     await tb.cycle_reset()
 
-    req_tlps = []
-    cpl_tlps = []
+    tb.set_idle_generator(idle_inserter)
+    tb.set_backpressure_generator(backpressure_inserter)
 
-    # posted writes with data -> request port
-    for i in range(4):
-        data = bytearray(itertools.islice(itertools.cycle(range(256)), 64*(i+1)))
-        req_tlps.append(make_mem_write(i, 0x1000 + 0x100*i, data))
+    test_tlps = []
 
-    # header-only memory reads -> request port (exercises dvalid|hvalid decode)
-    for i in range(4):
-        req_tlps.append(make_mem_read(i, 0x2000 + 0x10*i, 8))
+    for test_data in [payload_data(x) for x in payload_lengths()]:
+        test_tlp = Tlp()
 
-    # completions with data -> completion port
-    for i in range(4):
-        data = bytearray(itertools.islice(itertools.cycle(range(256)), 32*(i+1)))
-        cpl_tlps.append(make_cpl_data(i, 0, data))
+        if len(test_data):
+            test_tlp.fmt_type = TlpType.MEM_WRITE
+            test_tlp.set_addr_be_data(cur_seq*4, test_data)
+        else:
+            test_tlp.fmt_type = TlpType.MEM_READ
+            test_tlp.set_addr_be(cur_seq*4, 4)
 
-    for tlp in req_tlps + cpl_tlps:
-        tb.source.send(tlp)
+        test_tlps.append(test_tlp)
+        tb.source.send(test_tlp)
 
-    for tlp in req_tlps:
+        cur_seq = (cur_seq + 1) % seq_count
+
+    for test_tlp in test_tlps:
         rx_frame = await tb.req_sink.recv()
-        rx = rx_frame.to_tlp()
-        assert rx == tlp, f"request mismatch:\n  got {rx}\n  exp {tlp}"
 
-    for tlp in cpl_tlps:
-        rx_frame = await tb.cpl_sink.recv()
-        rx = rx_frame.to_tlp()
-        assert rx == tlp, f"completion mismatch:\n  got {rx}\n  exp {tlp}"
+        rx_tlp = rx_frame.to_tlp()
+
+        assert test_tlp == rx_tlp
 
     assert tb.req_sink.empty()
     assert tb.cpl_sink.empty()
@@ -137,8 +116,147 @@ async def run_test(dut):
     await RisingEdge(dut.clk)
 
 
+async def run_test_cpl(dut, payload_lengths=None, payload_data=None, idle_inserter=None, backpressure_inserter=None):
+
+    tb = TB(dut)
+
+    seq_count = 32
+
+    cur_seq = 1
+
+    await tb.cycle_reset()
+
+    tb.set_idle_generator(idle_inserter)
+    tb.set_backpressure_generator(backpressure_inserter)
+
+    test_tlps = []
+
+    for test_data in [payload_data(x) for x in payload_lengths()]:
+        test_tlp = Tlp()
+
+        if len(test_data):
+            test_tlp.fmt_type = TlpType.CPL_DATA
+            test_tlp.byte_count = len(test_data)
+            test_tlp.length = test_tlp.byte_count // 4
+            test_tlp.set_data(test_data)
+            test_tlp.tag = cur_seq
+        else:
+            test_tlp.fmt_type = TlpType.CPL
+            test_tlp.byte_count = 4
+            test_tlp.length = 0
+            test_tlp.tag = cur_seq
+
+        test_tlps.append(test_tlp)
+        tb.source.send(test_tlp)
+
+        cur_seq = (cur_seq + 1) % seq_count
+
+    for test_tlp in test_tlps:
+        rx_frame = await tb.cpl_sink.recv()
+
+        rx_tlp = rx_frame.to_tlp()
+
+        assert test_tlp == rx_tlp
+
+    assert tb.req_sink.empty()
+    assert tb.cpl_sink.empty()
+
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+
+
+async def run_stress_test(dut, idle_inserter=None, backpressure_inserter=None):
+
+    tb = TB(dut)
+
+    seq_count = 32
+
+    cur_seq = 1
+
+    await tb.cycle_reset()
+
+    tb.set_idle_generator(idle_inserter)
+    tb.set_backpressure_generator(backpressure_inserter)
+
+    test_req_tlps = []
+    test_cpl_tlps = []
+
+    for k in range(128):
+        length = random.randint(1, 512)
+        test_tlp = Tlp()
+        test_tlp.fmt_type = random.choice([TlpType.MEM_WRITE, TlpType.MEM_READ, TlpType.CPL_DATA])
+        addr = cur_seq*4 + random.choice([0x12340000, 0x123400000000])
+        if test_tlp.fmt_type == TlpType.MEM_WRITE:
+            if addr >> 32:
+                test_tlp.fmt_type = TlpType.MEM_WRITE_64
+            test_data = bytearray(itertools.islice(itertools.cycle(range(256)), length))
+            test_tlp.set_addr_be_data(addr, test_data)
+            test_req_tlps.append(test_tlp)
+        elif test_tlp.fmt_type == TlpType.MEM_READ:
+            if addr >> 32:
+                test_tlp.fmt_type = TlpType.MEM_READ_64
+            test_tlp.set_addr_be(addr, length)
+            test_tlp.tag = cur_seq
+            test_req_tlps.append(test_tlp)
+        elif test_tlp.fmt_type == TlpType.CPL_DATA:
+            test_data = bytearray(itertools.islice(itertools.cycle(range(256)), length))
+            test_tlp.byte_count = len(test_data)
+            test_tlp.length = (test_tlp.byte_count+3) // 4
+            test_tlp.set_data(test_data+b'\x00'*(3-(len(test_data)-1) % 4))
+            test_tlp.tag = cur_seq
+            test_cpl_tlps.append(test_tlp)
+
+        tb.source.send(test_tlp)
+
+        cur_seq = (cur_seq + 1) % seq_count
+
+    for test_tlp in test_req_tlps:
+        rx_frame = await tb.req_sink.recv()
+
+        rx_tlp = rx_frame.to_tlp()
+
+        assert test_tlp == rx_tlp
+
+    for test_tlp in test_cpl_tlps:
+        rx_frame = await tb.cpl_sink.recv()
+
+        rx_tlp = rx_frame.to_tlp()
+
+        assert test_tlp == rx_tlp
+
+    assert tb.req_sink.empty()
+    assert tb.cpl_sink.empty()
+
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+
+
+def cycle_pause():
+    return itertools.cycle([1, 1, 1, 0])
+
+
+def size_list():
+    return list(range(0, 512+1, 4))+[4]*64
+
+
+def incrementing_payload(length):
+    return bytearray(itertools.islice(itertools.cycle(range(256)), length))
+
+
 if cocotb.SIM_NAME:
-    factory = TestFactory(run_test)
+
+    for test in [run_test_req, run_test_cpl]:
+
+        factory = TestFactory(test)
+        factory.add_option("payload_lengths", [size_list])
+        factory.add_option("payload_data", [incrementing_payload])
+        factory.add_option("idle_inserter", [None, cycle_pause])
+        factory.add_option("backpressure_inserter", [None, cycle_pause])
+        factory.generate_tests()
+
+    factory = TestFactory(run_stress_test)
+    factory.add_option("idle_inserter", [None, cycle_pause])
+    factory.add_option("backpressure_inserter", [None, cycle_pause])
     factory.generate_tests()
 
 
